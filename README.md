@@ -5,4 +5,4 @@ chmod +x xsshunterproplus.sh
 
 
 
-./xsshunterproplus.sh --domain example.com --output results --threads 10 --tools gospider,paramspider,waybackurls,subfinder,amass --vuln xss,sqli,ssrf --exploit
+./xsshunterproplus.sh --domain example.com --output results --vuln xss,lfi,crlf
