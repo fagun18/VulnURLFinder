@@ -23,70 +23,25 @@ THREADS=10
 TOOLS="amass,subfinder,assetfinder,findomain,gospider,waybackurls,gau,paramspider"
 VULN_TYPES="xss,sqli,lfi,crlf"
 EXPLOIT=false
-INTERACTIVE=false
 
-# Function to display help
-show_help() {
-    echo -e "${GREEN}XSSHunterPro++ - Advanced Vulnerability Scanner${NC}"
-    echo "Usage: $0 [options]"
-    echo "Options:"
-    echo "  --domain DOMAIN       Target domain (e.g., example.com)"
-    echo "  --output DIR          Output directory (default: results)"
-    echo "  --threads NUM         Number of threads (default: 10)"
-    echo "  --tools TOOLS         Comma-separated list of tools to use (default: amass,subfinder,assetfinder,findomain,gospider,waybackurls,gau,paramspider)"
-    echo "  --vuln TYPES          Comma-separated list of vulnerabilities to test (default: xss,sqli,lfi,crlf)"
-    echo "  --exploit             Automatically exploit vulnerabilities (default: false)"
-    echo "  --interactive         Run in interactive mode"
-    echo "  --help                Show this help message"
-    exit 0
+# Function to display menu
+show_menu() {
+    clear
+    echo -e "${BLUE}"
+    echo "┌──────────────────────────────────────────────┐"
+    echo "│               XSSHunterPro++                │"
+    echo "├──────────────────────────────────────────────┤"
+    echo "│ 1. Subdomain Enumeration                     │"
+    echo "│ 2. URL Discovery                             │"
+    echo "│ 3. Vulnerability Scanning                    │"
+    echo "│ 4. Full Scan (Subdomain + URL + Vuln Scan)   │"
+    echo "│ 5. Update Tool                               │"
+    echo "│ 6. Install all tools                         │"
+    echo "│ 7. Help                                      │"
+    echo "│ 8. Exit                                      │"
+    echo "└──────────────────────────────────────────────┘"
+    echo -e "${NC}"
 }
-
-# Parse command-line arguments
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --domain)
-            DOMAIN="$2"
-            shift 2
-            ;;
-        --output)
-            OUTPUT_DIR="$2"
-            shift 2
-            ;;
-        --threads)
-            THREADS="$2"
-            shift 2
-            ;;
-        --tools)
-            TOOLS="$2"
-            shift 2
-            ;;
-        --vuln)
-            VULN_TYPES="$2"
-            shift 2
-            ;;
-        --exploit)
-            EXPLOIT=true
-            shift
-            ;;
-        --interactive)
-            INTERACTIVE=true
-            shift
-            ;;
-        --help)
-            show_help
-            ;;
-        *)
-            echo -e "${RED}Unknown option: $1${NC}"
-            show_help
-            ;;
-    esac
-done
-
-# Check if domain is provided
-if [[ -z "$DOMAIN" && "$INTERACTIVE" == false ]]; then
-    echo -e "${RED}Error: Domain is required. Use --domain or --interactive.${NC}"
-    show_help
-fi
 
 # Function to install tools
 install_tools() {
@@ -136,11 +91,11 @@ crawl_urls() {
             findomain)
                 echo -e "${YELLOW}Running Findomain...${NC}"
                 findomain -t "$DOMAIN" -o &
-                mv "$DOMAIN.txt" "$OUTPUT_DIR/findomain.txt"
+                mv "$DOMAIN.txt" "$OUTPUT_DIR/findomain.txt" 2>/dev/null || echo -e "${RED}Findomain output file not found!${NC}"
                 ;;
             gospider)
                 echo -e "${YELLOW}Running GoSpider...${NC}"
-                gospider -s "http://$DOMAIN" -o "$OUTPUT_DIR/gospider.txt" &
+                gospider -s "http://$DOMAIN" -o "$OUTPUT_DIR/gospider" &
                 ;;
             waybackurls)
                 echo -e "${YELLOW}Running Waybackurls...${NC}"
@@ -152,7 +107,7 @@ crawl_urls() {
                 ;;
             paramspider)
                 echo -e "${YELLOW}Running ParamSpider...${NC}"
-                paramspider -d "$DOMAIN" -o "$OUTPUT_DIR/paramspider.txt" &
+                paramspider -d "$DOMAIN" -o "$OUTPUT_DIR/paramspider" &
                 ;;
             hakrawler)
                 echo -e "${YELLOW}Running Hakrawler...${NC}"
@@ -188,25 +143,26 @@ test_vulnerabilities() {
         case "$vuln" in
             xss)
                 echo -e "${YELLOW}Testing for XSS...${NC}"
-                python3 xss_scanner.py --urls "$OUTPUT_DIR/filtered_urls.txt" --output "$OUTPUT_DIR/xss_results.txt"
+                dalfox file "$OUTPUT_DIR/filtered_urls.txt" -o "$OUTPUT_DIR/xss_results.txt" &
                 ;;
             sqli)
                 echo -e "${YELLOW}Testing for SQL Injection...${NC}"
-                python3 sqli_scanner.py --urls "$OUTPUT_DIR/filtered_urls.txt" --output "$OUTPUT_DIR/sqli_results.txt"
+                sqlmap -m "$OUTPUT_DIR/filtered_urls.txt" --batch -o "$OUTPUT_DIR/sqli_results.txt" &
                 ;;
             lfi)
                 echo -e "${YELLOW}Testing for LFI...${NC}"
-                python3 lfi_scanner.py --urls "$OUTPUT_DIR/filtered_urls.txt" --output "$OUTPUT_DIR/lfi_results.txt"
+                nuclei -t ~/nuclei-templates/lfi.yaml -l "$OUTPUT_DIR/filtered_urls.txt" -o "$OUTPUT_DIR/lfi_results.txt" &
                 ;;
             crlf)
                 echo -e "${YELLOW}Testing for CRLF...${NC}"
-                python3 crlf_scanner.py --urls "$OUTPUT_DIR/filtered_urls.txt" --output "$OUTPUT_DIR/crlf_results.txt"
+                nuclei -t ~/nuclei-templates/crlf.yaml -l "$OUTPUT_DIR/filtered_urls.txt" -o "$OUTPUT_DIR/crlf_results.txt" &
                 ;;
             *)
                 echo -e "${RED}Unknown vulnerability type: $vuln${NC}"
                 ;;
         esac
     done
+    wait
     echo -e "${GREEN}Vulnerability testing completed!${NC}"
 }
 
@@ -219,32 +175,103 @@ update_tool() {
     echo -e "${GREEN}Tool updated successfully!${NC}"
 }
 
-# Main function
-main() {
-    if [[ "$INTERACTIVE" == true ]]; then
-        echo -e "${BLUE}Running in interactive mode...${NC}"
-        read -p "Enter the target domain: " DOMAIN
-        read -p "Enter the output directory (default: results): " OUTPUT_DIR
-        OUTPUT_DIR=${OUTPUT_DIR:-"results"}
-        read -p "Enter the number of threads (default: 10): " THREADS
-        THREADS=${THREADS:-10}
-        read -p "Enter the tools to use (comma-separated, default: amass,subfinder,assetfinder,findomain,gospider,waybackurls,gau,paramspider): " TOOLS
-        TOOLS=${TOOLS:-"amass,subfinder,assetfinder,findomain,gospider,waybackurls,gau,paramspider"}
-        read -p "Enter the vulnerabilities to test (comma-separated, default: xss,sqli,lfi,crlf): " VULN_TYPES
-        VULN_TYPES=${VULN_TYPES:-"xss,sqli,lfi,crlf"}
-        read -p "Automatically exploit vulnerabilities? (y/n): " EXPLOIT_INPUT
-        if [[ "$EXPLOIT_INPUT" =~ ^[Yy]$ ]]; then
-            EXPLOIT=true
-        fi
-    fi
+# Function to display help
+show_help() {
+    echo -e "${BLUE}"
+    echo "┌──────────────────────────────────────────────┐"
+    echo "│               XSSHunterPro++ Help            │"
+    echo "├──────────────────────────────────────────────┤"
+    echo "│ 1. Subdomain Enumeration                     │"
+    echo "│    - Enumerate subdomains using Amass, Subfinder, etc."
+    echo "│ 2. URL Discovery                             │"
+    echo "│    - Discover URLs using GoSpider, Waybackurls, etc."
+    echo "│ 3. Vulnerability Scanning                    │"
+    echo "│    - Scan for vulnerabilities like XSS, SQLi, LFI, etc."
+    echo "│ 4. Full Scan (Subdomain + URL + Vuln Scan)   │"
+    echo "│    - Perform a full scan including all steps."
+    echo "│ 5. Update Tool                               │"
+    echo "│    - Update the tool to the latest version."
+    echo "│ 6. Install all tools                         │"
+    echo "│    - Install all required tools."
+    echo "│ 7. Help                                      │"
+    echo "│    - Show this help menu."
+    echo "│ 8. Exit                                      │"
+    echo "│    - Exit the script."
+    echo "└──────────────────────────────────────────────┘"
+    echo -e "${NC}"
+}
+
+# Function to perform full scan
+full_scan() {
+    echo -e "${BLUE}Starting Full Scan...${NC}"
+    read -p "Enter the target domain: " DOMAIN
+    read -p "Enter the output directory (default: results): " OUTPUT_DIR
+    OUTPUT_DIR=${OUTPUT_DIR:-"results"}
+    read -p "Enter the number of threads (default: 10): " THREADS
+    THREADS=${THREADS:-10}
 
     install_tools
     crawl_urls
     filter_urls
     test_vulnerabilities
-    generate_report
 
-    echo -e "${GREEN}Scan completed! Results saved in $OUTPUT_DIR.${NC}"
+    echo -e "${GREEN}Full Scan completed! Results saved in $OUTPUT_DIR.${NC}"
+}
+
+# Main function
+main() {
+    while true; do
+        show_menu
+        read -p "Select an option (1-8): " choice
+
+        case "$choice" in
+            1)
+                read -p "Enter the target domain: " DOMAIN
+                read -p "Enter the output directory (default: results): " OUTPUT_DIR
+                OUTPUT_DIR=${OUTPUT_DIR:-"results"}
+                install_tools
+                crawl_urls
+                ;;
+            2)
+                read -p "Enter the target domain: " DOMAIN
+                read -p "Enter the output directory (default: results): " OUTPUT_DIR
+                OUTPUT_DIR=${OUTPUT_DIR:-"results"}
+                install_tools
+                crawl_urls
+                filter_urls
+                ;;
+            3)
+                read -p "Enter the target domain: " DOMAIN
+                read -p "Enter the output directory (default: results): " OUTPUT_DIR
+                OUTPUT_DIR=${OUTPUT_DIR:-"results"}
+                install_tools
+                crawl_urls
+                filter_urls
+                test_vulnerabilities
+                ;;
+            4)
+                full_scan
+                ;;
+            5)
+                update_tool
+                ;;
+            6)
+                install_tools
+                ;;
+            7)
+                show_help
+                ;;
+            8)
+                echo -e "${GREEN}Exiting...${NC}"
+                exit 0
+                ;;
+            *)
+                echo -e "${RED}Invalid option! Please select a valid option.${NC}"
+                ;;
+        esac
+
+        read -p "Press Enter to continue..."
+    done
 }
 
 # Run the script
