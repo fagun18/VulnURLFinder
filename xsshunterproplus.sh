@@ -19,22 +19,22 @@ NC='\033[0m' # No Color
 # Variables
 DOMAIN=""
 OUTPUT_DIR="results"
-THREADS=5
-TOOLS="gospider,paramspider,waybackurls,subfinder,amass"
-VULN_TYPES="xss"
+THREADS=10
+TOOLS="amass,subfinder,assetfinder,findomain,gospider,waybackurls,gau,paramspider"
+VULN_TYPES="xss,sqli,lfi,crlf"
 EXPLOIT=false
 INTERACTIVE=false
 
 # Function to display help
 show_help() {
-    echo -e "${GREEN}XSSHunterPro++ - Advanced XSS Vulnerability Scanner${NC}"
+    echo -e "${GREEN}XSSHunterPro++ - Advanced Vulnerability Scanner${NC}"
     echo "Usage: $0 [options]"
     echo "Options:"
     echo "  --domain DOMAIN       Target domain (e.g., example.com)"
     echo "  --output DIR          Output directory (default: results)"
-    echo "  --threads NUM         Number of threads (default: 5)"
-    echo "  --tools TOOLS         Comma-separated list of tools to use (default: gospider,paramspider,waybackurls,subfinder,amass)"
-    echo "  --vuln TYPES          Comma-separated list of vulnerabilities to test (default: xss)"
+    echo "  --threads NUM         Number of threads (default: 10)"
+    echo "  --tools TOOLS         Comma-separated list of tools to use (default: amass,subfinder,assetfinder,findomain,gospider,waybackurls,gau,paramspider)"
+    echo "  --vuln TYPES          Comma-separated list of vulnerabilities to test (default: xss,sqli,lfi,crlf)"
     echo "  --exploit             Automatically exploit vulnerabilities (default: false)"
     echo "  --interactive         Run in interactive mode"
     echo "  --help                Show this help message"
@@ -92,20 +92,23 @@ fi
 install_tools() {
     echo -e "${BLUE}Installing required tools...${NC}"
     sudo apt update
-    sudo apt install -y git python3 python3-pip golang lolcat
+    sudo apt install -y git python3 python3-pip golang lolcat parallel
     pip3 install --upgrade pip
     pip3 install uro arjun qsreplace
 
     # Install Go tools
-    go install github.com/jaeles-project/gospider@latest
-    go install github.com/devanshbatham/paramspider@latest
-    go install github.com/lc/gau/v2/cmd/gau@latest
-    go install github.com/tomnomnom/waybackurls@latest
-    go install github.com/hahwul/dalfox/v2@latest
-    go install github.com/s0md3v/XSStrike@latest
+    go install github.com/OWASP/Amass/v3/...@latest
     go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
-    go install github.com/OWASP/Amass/v3/...@master
     go install github.com/tomnomnom/assetfinder@latest
+    go install github.com/Findomain/Findomain@latest
+    go install github.com/jaeles-project/gospider@latest
+    go install github.com/tomnomnom/waybackurls@latest
+    go install github.com/lc/gau/v2/cmd/gau@latest
+    go install github.com/devanshbatham/paramspider@latest
+    go install github.com/hakluke/hakrawler@latest
+    go install github.com/projectdiscovery/katana/cmd/katana@latest
+    go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest
+    go install github.com/hahwul/dalfox/v2@latest
 
     echo -e "${GREEN}Tools installed successfully!${NC}"
 }
@@ -118,13 +121,26 @@ crawl_urls() {
 
     for tool in "${TOOL_LIST[@]}"; do
         case "$tool" in
+            amass)
+                echo -e "${YELLOW}Running Amass...${NC}"
+                amass enum -d "$DOMAIN" -o "$OUTPUT_DIR/amass.txt" &
+                ;;
+            subfinder)
+                echo -e "${YELLOW}Running Subfinder...${NC}"
+                subfinder -d "$DOMAIN" -o "$OUTPUT_DIR/subfinder.txt" &
+                ;;
+            assetfinder)
+                echo -e "${YELLOW}Running Assetfinder...${NC}"
+                assetfinder "$DOMAIN" > "$OUTPUT_DIR/assetfinder.txt" &
+                ;;
+            findomain)
+                echo -e "${YELLOW}Running Findomain...${NC}"
+                findomain -t "$DOMAIN" -o &
+                mv "$DOMAIN.txt" "$OUTPUT_DIR/findomain.txt"
+                ;;
             gospider)
                 echo -e "${YELLOW}Running GoSpider...${NC}"
                 gospider -s "http://$DOMAIN" -o "$OUTPUT_DIR/gospider.txt" &
-                ;;
-            paramspider)
-                echo -e "${YELLOW}Running ParamSpider...${NC}"
-                paramspider -d "$DOMAIN" -o "$OUTPUT_DIR/paramspider.txt" &
                 ;;
             waybackurls)
                 echo -e "${YELLOW}Running Waybackurls...${NC}"
@@ -134,17 +150,17 @@ crawl_urls() {
                 echo -e "${YELLOW}Running Gau...${NC}"
                 gau "$DOMAIN" > "$OUTPUT_DIR/gau.txt" &
                 ;;
-            subfinder)
-                echo -e "${YELLOW}Running Subfinder...${NC}"
-                subfinder -d "$DOMAIN" -o "$OUTPUT_DIR/subfinder.txt" &
+            paramspider)
+                echo -e "${YELLOW}Running ParamSpider...${NC}"
+                paramspider -d "$DOMAIN" -o "$OUTPUT_DIR/paramspider.txt" &
                 ;;
-            amass)
-                echo -e "${YELLOW}Running Amass...${NC}"
-                amass enum -d "$DOMAIN" -o "$OUTPUT_DIR/amass.txt" &
+            hakrawler)
+                echo -e "${YELLOW}Running Hakrawler...${NC}"
+                hakrawler -url "http://$DOMAIN" -depth 3 -scope subs -plain > "$OUTPUT_DIR/hakrawler.txt" &
                 ;;
-            assetfinder)
-                echo -e "${YELLOW}Running Assetfinder...${NC}"
-                assetfinder "$DOMAIN" > "$OUTPUT_DIR/assetfinder.txt" &
+            katana)
+                echo -e "${YELLOW}Running Katana...${NC}"
+                katana -u "http://$DOMAIN" -o "$OUTPUT_DIR/katana.txt" &
                 ;;
             *)
                 echo -e "${RED}Unknown tool: $tool${NC}"
@@ -163,7 +179,7 @@ filter_urls() {
     echo -e "${GREEN}Filtering completed!${NC}"
 }
 
-# Function to test vulnerabilities using the Python script
+# Function to test vulnerabilities
 test_vulnerabilities() {
     echo -e "${BLUE}Testing vulnerabilities...${NC}"
     VULN_LIST=($(echo "$VULN_TYPES" | tr ',' ' '))
@@ -194,16 +210,13 @@ test_vulnerabilities() {
     echo -e "${GREEN}Vulnerability testing completed!${NC}"
 }
 
-# Function to generate report
-generate_report() {
-    echo -e "${BLUE}Generating report...${NC}"
-    echo "<html><body><h1>XSSHunterPro++ Report</h1>" > "$OUTPUT_DIR/report.html"
-    echo "<h2>Vulnerable URLs</h2><ul>" >> "$OUTPUT_DIR/report.html"
-    while read -r url; do
-        echo "<li><a href='$url'>$url</a></li>" >> "$OUTPUT_DIR/report.html"
-    done < "$OUTPUT_DIR/xss_results.txt"
-    echo "</ul></body></html>" >> "$OUTPUT_DIR/report.html"
-    echo -e "${GREEN}Report generated: $OUTPUT_DIR/report.html${NC}"
+# Function to update the tool
+update_tool() {
+    echo -e "${BLUE}Updating the tool...${NC}"
+    git clone https://github.com/fagun18/VulnURLFinder.git /tmp/VulnURLFinder
+    cp -r /tmp/VulnURLFinder/* .
+    rm -rf /tmp/VulnURLFinder
+    echo -e "${GREEN}Tool updated successfully!${NC}"
 }
 
 # Main function
@@ -213,12 +226,12 @@ main() {
         read -p "Enter the target domain: " DOMAIN
         read -p "Enter the output directory (default: results): " OUTPUT_DIR
         OUTPUT_DIR=${OUTPUT_DIR:-"results"}
-        read -p "Enter the number of threads (default: 5): " THREADS
-        THREADS=${THREADS:-5}
-        read -p "Enter the tools to use (comma-separated, default: gospider,paramspider,waybackurls,subfinder,amass): " TOOLS
-        TOOLS=${TOOLS:-"gospider,paramspider,waybackurls,subfinder,amass"}
-        read -p "Enter the vulnerabilities to test (comma-separated, default: xss): " VULN_TYPES
-        VULN_TYPES=${VULN_TYPES:-"xss"}
+        read -p "Enter the number of threads (default: 10): " THREADS
+        THREADS=${THREADS:-10}
+        read -p "Enter the tools to use (comma-separated, default: amass,subfinder,assetfinder,findomain,gospider,waybackurls,gau,paramspider): " TOOLS
+        TOOLS=${TOOLS:-"amass,subfinder,assetfinder,findomain,gospider,waybackurls,gau,paramspider"}
+        read -p "Enter the vulnerabilities to test (comma-separated, default: xss,sqli,lfi,crlf): " VULN_TYPES
+        VULN_TYPES=${VULN_TYPES:-"xss,sqli,lfi,crlf"}
         read -p "Automatically exploit vulnerabilities? (y/n): " EXPLOIT_INPUT
         if [[ "$EXPLOIT_INPUT" =~ ^[Yy]$ ]]; then
             EXPLOIT=true
