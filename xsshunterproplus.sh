@@ -92,7 +92,7 @@ fi
 install_tools() {
     echo -e "${BLUE}Installing required tools...${NC}"
     sudo apt update
-    sudo apt install -y git python3 python3-pip golang
+    sudo apt install -y git python3 python3-pip golang lolcat
     pip3 install --upgrade pip
     pip3 install uro arjun qsreplace
 
@@ -163,7 +163,7 @@ filter_urls() {
     echo -e "${GREEN}Filtering completed!${NC}"
 }
 
-# Function to test vulnerabilities
+# Function to test vulnerabilities using the Python script
 test_vulnerabilities() {
     echo -e "${BLUE}Testing vulnerabilities...${NC}"
     VULN_LIST=($(echo "$VULN_TYPES" | tr ',' ' '))
@@ -172,19 +172,19 @@ test_vulnerabilities() {
         case "$vuln" in
             xss)
                 echo -e "${YELLOW}Testing for XSS...${NC}"
-                cat "$OUTPUT_DIR/filtered_urls.txt" | dalfox pipe --silence --skip-bav -o "$OUTPUT_DIR/xss_results.txt"
-                if [[ "$EXPLOIT" == true ]]; then
-                    echo -e "${YELLOW}Exploiting XSS vulnerabilities...${NC}"
-                    xsstrike -u "$OUTPUT_DIR/filtered_urls.txt" --crawl --blind --file "$OUTPUT_DIR/xss_exploits.txt"
-                fi
+                python3 xss_scanner.py --urls "$OUTPUT_DIR/filtered_urls.txt" --output "$OUTPUT_DIR/xss_results.txt"
                 ;;
             sqli)
                 echo -e "${YELLOW}Testing for SQL Injection...${NC}"
-                sqlmap -m "$OUTPUT_DIR/filtered_urls.txt" --batch -o "$OUTPUT_DIR/sqli_results.txt"
+                python3 sqli_scanner.py --urls "$OUTPUT_DIR/filtered_urls.txt" --output "$OUTPUT_DIR/sqli_results.txt"
                 ;;
-            ssrf)
-                echo -e "${YELLOW}Testing for SSRF...${NC}"
-                nuclei -t ssrf.yaml -l "$OUTPUT_DIR/filtered_urls.txt" -o "$OUTPUT_DIR/ssrf_results.txt"
+            lfi)
+                echo -e "${YELLOW}Testing for LFI...${NC}"
+                python3 lfi_scanner.py --urls "$OUTPUT_DIR/filtered_urls.txt" --output "$OUTPUT_DIR/lfi_results.txt"
+                ;;
+            crlf)
+                echo -e "${YELLOW}Testing for CRLF...${NC}"
+                python3 crlf_scanner.py --urls "$OUTPUT_DIR/filtered_urls.txt" --output "$OUTPUT_DIR/crlf_results.txt"
                 ;;
             *)
                 echo -e "${RED}Unknown vulnerability type: $vuln${NC}"
@@ -235,4 +235,4 @@ main() {
 }
 
 # Run the script
-main
+main | lolcat
